@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, Upload, MessageSquare, FileText, Settings, BarChart, 
-  Zap, Loader2, Send, Trash2 
+  Zap, Loader2, Send, Trash2, X 
 } from 'lucide-react';
 
 // API Configuration
@@ -43,7 +43,7 @@ const App = () => {
                 <Search className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Thai Document Search & Chat</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Thai Search & Chat</h1>
                 <p className="text-sm text-gray-600">Multi-format document search with AI</p>
               </div>
             </div>
@@ -113,14 +113,17 @@ const ChatTab = ({ apiStatus }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('rag'); // 'rag' or 'direct'
+  const [expandedSources, setExpandedSources] = useState({}); // Track which messages have expanded sources
   const [settings, setSettings] = useState({
     model: 'gpt-oss:20b',
     temperature: 0.7,
     k: 5,
-    searchMethod: 'hybrid'
+    searchMethod: 'Semantic',
+    streaming: true // Enable streaming by default
   });
   const [availableModels, setAvailableModels] = useState([]);
   const messagesEndRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     loadModels();
@@ -149,68 +152,263 @@ const ChatTab = ({ apiStatus }) => {
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
     setInput('');
     setLoading(true);
 
+    // Create abort controller for cancellation
+    abortControllerRef.current = new AbortController();
+
     try {
       if (mode === 'rag') {
-        // RAG mode - search documents + LLM answer
-        const res = await fetch(`${API_BASE_URL}/search/llm`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: input,
-            k: settings.k,
-            search_method: settings.searchMethod,
-            llm_model: settings.model,
-            temperature: settings.temperature,
-            language: 'thai'
-          })
-        });
+        if (settings.streaming) {
+          // RAG with Streaming
+          await handleRAGStreaming(currentInput);
+        } else {
+          // RAG without streaming (original)
+          const res = await fetch(`${API_BASE_URL}/search/llm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: currentInput,
+              k: settings.k,
+              search_method: settings.searchMethod,
+              llm_model: settings.model,
+              temperature: settings.temperature,
+              language: 'thai'
+            }),
+            signal: abortControllerRef.current.signal
+          });
 
-        const data = await res.json();
-        
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: data.llm_answer,
-          sources: data.search_results.slice(0, 3).map(r => ({
-            file: r.metadata.source_file,
-            page: r.metadata.page_number,
-            score: r.similarity_score
-          })),
-          stats: {
-            searchTime: data.search_time,
-            llmTime: data.llm_time,
-            totalResults: data.search_results.length
-          }
-        }]);
+          const data = await res.json();
+          
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: data.llm_answer,
+            sources: data.search_results.map(r => ({ // Keep ALL sources
+              file: r.metadata.source_file,
+              page: r.metadata.page_number,
+              score: r.similarity_score,
+              content: r.content.substring(0, 200) + '...' // Preview
+            })),
+            stats: {
+              searchTime: data.search_time,
+              llmTime: data.llm_time,
+              totalResults: data.search_results.length
+            }
+          }]);
+        }
       } else {
-        // Direct LLM mode
-        const res = await fetch(`${API_BASE_URL}/llm/generate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: input,
-            llm_model: settings.model,
-            temperature: settings.temperature
-          })
-        });
+        if (settings.streaming) {
+          // Direct LLM with Streaming
+          await handleDirectLLMStreaming(currentInput);
+        } else {
+          // Direct LLM without streaming (original)
+          const res = await fetch(`${API_BASE_URL}/llm/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: currentInput,
+              llm_model: settings.model,
+              temperature: settings.temperature
+            }),
+            signal: abortControllerRef.current.signal
+          });
 
-        const data = await res.json();
-        
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: data.response
-        }]);
+          const data = await res.json();
+          
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: data.response
+          }]);
+        }
       }
     } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'error',
-        content: `Error: ${error.message}`
-      }]);
+      if (error.name === 'AbortError') {
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: 'Generation cancelled by user'
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'error',
+          content: `Error: ${error.message}`
+        }]);
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
+  };
+
+  const handleRAGStreaming = async (query) => {
+    // Create placeholder message for streaming
+    const messageIndex = messages.length + 1;
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '',
+      sources: null,
+      stats: null,
+      streaming: true
+    }]);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/search/llm/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query,
+          k: settings.k,
+          search_method: settings.searchMethod,
+          llm_model: settings.model,
+          temperature: settings.temperature,
+          language: 'thai'
+        }),
+        signal: abortControllerRef.current.signal
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let searchResults = null;
+      let accumulatedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'search_results') {
+                searchResults = data.results;
+              } else if (data.type === 'llm_chunk') {
+                accumulatedText += data.content;
+                
+                // Update message with accumulated text
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[messageIndex] = {
+                    role: 'assistant',
+                    content: accumulatedText,
+                    sources: searchResults ? searchResults.map(r => ({
+                      file: r.source || 'Unknown',
+                      page: r.page || 0,
+                      score: r.similarity_score || 0,
+                      content: r.content ? r.content.substring(0, 200) + '...' : ''
+                    })) : null,
+                    streaming: true
+                  };
+                  return newMessages;
+                });
+              } else if (data.type === 'done') {
+                // Mark as complete
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  if (newMessages[messageIndex]) {
+                    newMessages[messageIndex].streaming = false;
+                  }
+                  return newMessages;
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const handleDirectLLMStreaming = async (prompt) => {
+    // Create placeholder message for streaming
+    const messageIndex = messages.length + 1;
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '',
+      streaming: true
+    }]);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/llm/generate/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          llm_model: settings.model,
+          temperature: settings.temperature
+        }),
+        signal: abortControllerRef.current.signal
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'chunk') {
+                accumulatedText += data.content;
+                
+                // Update message with accumulated text
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  newMessages[messageIndex] = {
+                    role: 'assistant',
+                    content: accumulatedText,
+                    streaming: true
+                  };
+                  return newMessages;
+                });
+              } else if (data.type === 'done') {
+                // Mark as complete
+                setMessages(prev => {
+                  const newMessages = [...prev];
+                  if (newMessages[messageIndex]) {
+                    newMessages[messageIndex].streaming = false;
+                  }
+                  return newMessages;
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing SSE data:', e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setLoading(false);
+    }
+  };
+
+  const toggleSourcesExpanded = (messageIndex) => {
+    setExpandedSources(prev => ({
+      ...prev,
+      [messageIndex]: !prev[messageIndex]
+    }));
   };
 
   const clearChat = () => {
@@ -320,6 +518,31 @@ const ChatTab = ({ apiStatus }) => {
             </>
           )}
 
+          {/* Streaming Toggle */}
+          <div className="mb-4">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-sm font-medium text-gray-700">Enable Streaming</span>
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={settings.streaming}
+                  onChange={(e) => setSettings({ ...settings, streaming: e.target.checked })}
+                  className="sr-only"
+                />
+                <div className={`w-11 h-6 rounded-full transition-colors ${
+                  settings.streaming ? 'bg-indigo-600' : 'bg-gray-300'
+                }`}>
+                  <div className={`absolute top-0.5 left-0.5 bg-white w-5 h-5 rounded-full transition-transform ${
+                    settings.streaming ? 'transform translate-x-5' : ''
+                  }`}></div>
+                </div>
+              </div>
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Stream responses in real-time for faster feedback
+            </p>
+          </div>
+
           <button
             onClick={clearChat}
             className="w-full px-4 py-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors flex items-center justify-center"
@@ -379,18 +602,70 @@ const ChatTab = ({ apiStatus }) => {
                     ? 'bg-indigo-600 text-white'
                     : msg.role === 'error'
                     ? 'bg-red-50 text-red-800 border border-red-200'
+                    : msg.role === 'system'
+                    ? 'bg-yellow-50 text-yellow-800 border border-yellow-200'
                     : 'bg-gray-100 text-gray-900'
                 }`}>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  <div className="whitespace-pre-wrap">
+                    {msg.content}
+                    {msg.streaming && (
+                      <span className="inline-block w-2 h-4 ml-1 bg-indigo-600 animate-pulse"></span>
+                    )}
+                  </div>
                   
-                  {msg.sources && (
+                  {msg.sources && msg.sources.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-gray-300">
-                      <p className="text-xs font-semibold mb-2 text-gray-700">Sources:</p>
-                      {msg.sources.map((src, i) => (
-                        <div key={i} className="text-xs text-gray-600 mb-1">
-                          📄 {src.file} (Page {src.page}) - {(src.score * 100).toFixed(1)}%
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold text-gray-700">
+                          Sources ({msg.sources.length})
+                        </p>
+                        {msg.sources.length > 3 && (
+                          <button
+                            onClick={() => toggleSourcesExpanded(idx)}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                          >
+                            {expandedSources[idx] ? 'Show Less' : 'Show All'}
+                          </button>
+                        )}
+                      </div>
+                      
+                      {/* Display sources */}
+                      <div className="space-y-2">
+                        {(expandedSources[idx] ? msg.sources : msg.sources.slice(0, 3)).map((src, i) => (
+                          <div key={i} className="text-xs bg-white bg-opacity-50 rounded p-2 border border-gray-200">
+                            <div className="flex items-start justify-between mb-1">
+                              <div className="flex items-center space-x-2 flex-1">
+                                <div className="flex items-center space-x-1 flex-shrink-0">
+                                  <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded text-xs font-bold">
+                                    #{i + 1}
+                                  </span>
+                                  <FileText className="w-3 h-3 text-indigo-600" />
+                                </div>
+                                <span className="font-medium text-gray-800 truncate">
+                                  {src.file}
+                                </span>
+                              </div>
+                              <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded text-xs font-medium flex-shrink-0">
+                                {(src.score * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="text-gray-600 ml-5 pl-6">
+                              Page {src.page}
+                            </div>
+                            {src.content && (
+                              <div className="text-gray-500 text-xs mt-1 ml-5 pl-6 italic">
+                                "{src.content}"
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      {!expandedSources[idx] && msg.sources.length > 3 && (
+                        <div className="text-xs text-gray-500 mt-2 text-center">
+                          +{msg.sources.length - 3} more sources
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
 
@@ -428,18 +703,30 @@ const ChatTab = ({ apiStatus }) => {
                 disabled={loading}
                 className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
               />
-              <button
-                onClick={sendMessage}
-                disabled={loading || !input.trim()}
-                className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center transition-colors"
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
+              {loading ? (
+                <button
+                  onClick={stopGeneration}
+                  className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                  <span className="ml-2">Stop</span>
+                </button>
+              ) : (
+                <button
+                  onClick={sendMessage}
+                  disabled={!input.trim()}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center transition-colors"
+                >
                   <Send className="w-5 h-5" />
-                )}
-              </button>
+                </button>
+              )}
             </div>
+            {loading && settings.streaming && (
+              <div className="mt-2 flex items-center text-sm text-gray-600">
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                <span>Streaming response...</span>
+              </div>
+            )}
           </div>
         </div>
       </div>

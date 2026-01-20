@@ -44,7 +44,7 @@ const App = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Thai Document Search & Chat</h1>
-                <p className="text-sm text-gray-600">Multi-format document search with AI</p>
+                <p className="text-sm text-gray-600">Multi-format document search with AI (Ollama models)</p>
               </div>
             </div>
             

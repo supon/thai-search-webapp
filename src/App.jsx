@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 
 // API Configuration
-const API_BASE_URL = 'http://10.223.72.14:8743';
+import { API_BASE_URL } from './config';
 
 // =============================================
 // MAIN APP COMPONENT
@@ -43,8 +43,8 @@ const App = () => {
                 <Search className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">ThaiJO Document Search & Chat</h1>
-                <p className="text-sm text-gray-600">Multi-format document search with AI (Thai)</p>
+                <h1 className="text-2xl font-bold text-gray-900">Thai Search & Chat</h1>
+                <p className="text-sm text-gray-600">Multi-format document search with AI</p>
               </div>
             </div>
             
@@ -738,32 +738,60 @@ const ChatTab = ({ apiStatus }) => {
 // SEARCH TAB COMPONENT
 // =============================================
 const SearchTab = () => {
+  const [searchMode, setSearchMode] = useState('text'); // 'text' or 'file'
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [searchType, setSearchType] = useState('hybrid');
   const [k, setK] = useState(10);
+  
+  // Text search options
+  const [textSearchType, setTextSearchType] = useState('basic'); // 'basic' or 'detailed'
+  
+  // File upload options
+  const [file, setFile] = useState(null);
+  const [fileSearchType, setFileSearchType] = useState('semantic'); // 'semantic', 'detailed', 'hybrid'
+  const [useFullContent, setUseFullContent] = useState(false);
 
-  const performSearch = async () => {
+  const performTextSearch = async () => {
     if (!query.trim()) return;
     
     setLoading(true);
     try {
-      const endpoint = searchType === 'hybrid' ? '/search/hybrid' : '/search';
-      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      let endpoint = '';
+      let requestBody = {};
+
+      if (textSearchType === 'basic') {
+        // Basic search: /search or /search/hybrid
+        endpoint = searchType === 'hybrid' ? '/search/hybrid' : '/search';
+        requestBody = {
           query,
           k,
           nprobe: 10,
           semantic_weight: 0.7,
           keyword_weight: 0.3
-        })
+        };
+      } else {
+        // Detailed search: /search/text or /search/detailed
+        endpoint = '/search/detailed';
+        requestBody = {
+          query,
+          k,
+          nprobe: 10,
+          semantic_weight: 0.7,
+          keyword_weight: 0.3,
+          include_context: true
+        };
+      }
+
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       });
 
       const data = await res.json();
-      setResults(data);
+      setResults({ ...data, searchMode: 'text', type: textSearchType });
     } catch (error) {
       alert('Search failed: ' + error.message);
     } finally {
@@ -771,105 +799,487 @@ const SearchTab = () => {
     }
   };
 
+  const performFileSearch = async () => {
+    if (!file) {
+      alert('Please select a file first');
+      return;
+    }
+    
+    setLoading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('k', k);
+    formData.append('nprobe', 10);
+    formData.append('use_full_content', useFullContent);
+
+    try {
+      let endpoint = '';
+      
+      if (fileSearchType === 'semantic') {
+        endpoint = '/search/upload-file';
+      } else if (fileSearchType === 'detailed') {
+        endpoint = '/search/upload-file/detailed';
+      } else {
+        endpoint = '/search/upload-file/hybrid';
+      }
+
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+      setResults({ ...data, searchMode: 'file', type: fileSearchType, fileName: file.name });
+    } catch (error) {
+      alert('File search failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Search Controls */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="space-y-4">
-          <div className="flex space-x-4">
-            <button
-              onClick={() => setSearchType('semantic')}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                searchType === 'semantic'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Semantic Search
-            </button>
-            <button
-              onClick={() => setSearchType('hybrid')}
-              className={`px-4 py-2 rounded-md transition-colors ${
-                searchType === 'hybrid'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              Hybrid Search
-            </button>
-          </div>
-
-          <div className="flex space-x-4">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && performSearch()}
-              placeholder="Enter search query in Thai or English..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            />
-            <select
-              value={k}
-              onChange={(e) => setK(parseInt(e.target.value))}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value={5}>Top 5</option>
-              <option value={10}>Top 10</option>
-              <option value={20}>Top 20</option>
-            </select>
-            <button
-              onClick={performSearch}
-              disabled={loading}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 flex items-center transition-colors"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-              <span className="ml-2">Search</span>
-            </button>
-          </div>
-        </div>
+      {/* Mode Selection */}
+      <div className="flex items-center space-x-2 border-b">
+        <button
+          onClick={() => {
+            setSearchMode('text');
+            setResults(null);
+          }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            searchMode === 'text'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4 inline mr-2" />
+          Text Search
+        </button>
+        <button
+          onClick={() => {
+            setSearchMode('file');
+            setResults(null);
+          }}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            searchMode === 'file'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Upload className="w-4 h-4 inline mr-2" />
+          File Upload Search
+        </button>
       </div>
 
-      {/* Results */}
-      {results && (
+      {/* TEXT SEARCH MODE */}
+      {searchMode === 'text' && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">
-              Found {results.total_results} results in {(results.processing_time * 1000).toFixed(0)}ms
-            </h3>
-            <span className="text-sm text-gray-600">{results.search_method}</span>
+          <h3 className="text-lg font-semibold mb-4">Text Search</h3>
+          
+          {/* Text Search Type Selection */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Type</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setTextSearchType('basic')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  textSearchType === 'basic'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Basic Search
+              </button>
+              <button
+                onClick={() => setTextSearchType('detailed')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  textSearchType === 'detailed'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Detailed Search
+              </button>
+            </div>
           </div>
 
+          {/* Semantic/Hybrid toggle (for basic search) */}
+          {textSearchType === 'basic' && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Method</label>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setSearchType('semantic')}
+                  className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                    searchType === 'semantic'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Semantic
+                </button>
+                <button
+                  onClick={() => setSearchType('hybrid')}
+                  className={`px-4 py-2 rounded-md text-sm transition-colors ${
+                    searchType === 'hybrid'
+                      ? 'bg-indigo-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Hybrid
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Search Input */}
           <div className="space-y-4">
-            {results.results.map((result, idx) => (
-              <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    <FileText className="w-4 h-4 text-indigo-600" />
-                    <span className="font-medium text-gray-900">{result.metadata.source_file}</span>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Enter your search query
+              </label>
+              <textarea
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && performTextSearch()}
+                placeholder="Enter text or paragraph to search..."
+                rows={4}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="w-32">
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Results</label>
+                <select
+                  value={k}
+                  onChange={(e) => setK(parseInt(e.target.value))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value={5}>Top 5</option>
+                  <option value={10}>Top 10</option>
+                  <option value={20}>Top 20</option>
+                  <option value={50}>Top 50</option>
+                </select>
+              </div>
+
+              <div className="pt-1 flex-1">
+                <button
+                  onClick={performTextSearch}
+                  disabled={loading || !query.trim()}
+                  className="w-full px-8 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 flex items-center justify-center transition-colors"
+                >
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Search className="w-5 h-5 mr-2" />}
+                  Search
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Info Box */}
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              {textSearchType === 'basic' 
+                ? `📝 Basic Search: Quick ${searchType} search with similarity scores`
+                : '📊 Detailed Search: Document-level aggregation with chunk analysis'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* FILE UPLOAD SEARCH MODE */}
+      {searchMode === 'file' && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold mb-4">File Upload Search</h3>
+          
+          {/* File Search Type Selection */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Search Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setFileSearchType('semantic')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  fileSearchType === 'semantic'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Semantic
+              </button>
+              <button
+                onClick={() => setFileSearchType('detailed')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  fileSearchType === 'detailed'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Detailed
+              </button>
+              <button
+                onClick={() => setFileSearchType('hybrid')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  fileSearchType === 'hybrid'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Hybrid
+              </button>
+            </div>
+          </div>
+
+          {/* File Upload Area */}
+          <div className="space-y-4">
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-indigo-400 transition-colors">
+              <input
+                type="file"
+                onChange={(e) => setFile(e.target.files[0])}
+                accept=".pdf,.docx,.doc,.txt,.odt,.xlsx,.xls,.csv"
+                className="hidden"
+                id="search-file-upload"
+              />
+              <label htmlFor="search-file-upload" className="cursor-pointer">
+                <Upload className="w-12 h-12 mx-auto text-gray-400 mb-3" />
+                <p className="text-gray-700 font-medium">
+                  {file ? file.name : 'Click to upload file'}
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  PDF, DOCX, TXT, XLSX, CSV (Max 50MB)
+                </p>
+              </label>
+            </div>
+
+            {/* Options */}
+            <div className="flex items-center space-x-4">
+              <div className="w-32">
+                <label className="text-xs font-medium text-gray-700 mb-1 block">Results</label>
+                <select
+                  value={k}
+                  onChange={(e) => setK(parseInt(e.target.value))}
+                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value={5}>Top 5</option>
+                  <option value={10}>Top 10</option>
+                  <option value={20}>Top 20</option>
+                  <option value={50}>Top 50</option>
+                </select>
+              </div>
+
+              <div className="flex items-center pt-1">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useFullContent}
+                    onChange={(e) => setUseFullContent(e.target.checked)}
+                    className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Use Full Content</span>
+                </label>
+              </div>
+            </div>
+
+            <button
+              onClick={performFileSearch}
+              disabled={loading || !file}
+              className="w-full px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-gray-300 flex items-center justify-center transition-colors"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Search className="w-5 h-5 mr-2" />}
+              Search with File
+            </button>
+          </div>
+
+          {/* Info Box */}
+          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              {fileSearchType === 'semantic' && '📄 Semantic: Basic file-based semantic search'}
+              {fileSearchType === 'detailed' && '📊 Detailed: Document-level results with chunk ranking'}
+              {fileSearchType === 'hybrid' && '🔀 Hybrid: Combined semantic + keyword search'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* RESULTS DISPLAY */}
+      {results && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">
+                Search Results
+              </h3>
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded font-medium">
+                  {results.searchMode === 'text' ? 'Text Search' : 'File Search'}
+                </span>
+                <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded">
+                  {results.type}
+                </span>
+              </div>
+            </div>
+            
+            {results.fileName && (
+              <p className="text-sm text-gray-600 mb-2">
+                📎 File: <span className="font-medium">{results.fileName}</span>
+              </p>
+            )}
+            
+            <p className="text-sm text-gray-600">
+              Found {results.total_results || results.total_documents_found || results.document_results?.length || 0} results
+              {results.processing_time && ` in ${(results.processing_time * 1000).toFixed(0)}ms`}
+            </p>
+          </div>
+
+          {/* Display results based on type */}
+          {results.results && (
+            <div className="space-y-4">
+              {results.results.map((result, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-1 bg-indigo-600 text-white rounded text-xs font-bold">
+                        #{idx + 1}
+                      </span>
+                      <FileText className="w-4 h-4 text-indigo-600" />
+                      <span className="font-medium text-gray-900">{result.metadata?.source_file || 'Unknown'}</span>
+                    </div>
+                    <div className="flex items-center space-x-4 text-sm">
+                      {result.metadata?.page_number && (
+                        <span className="text-gray-600">Page {result.metadata.page_number}</span>
+                      )}
+                      <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
+                        {(result.similarity_score * 100).toFixed(1)}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-4 text-sm">
-                    <span className="text-gray-600">Page {result.metadata.page_number}</span>
-                    <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
-                      {(result.similarity_score * 100).toFixed(1)}%
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    {result.content?.substring(0, 300)}...
+                  </p>
+                  
+                  {result.score_breakdown && (
+                    <div className="mt-2 flex space-x-4 text-xs text-gray-500">
+                      <span>Semantic: {(result.score_breakdown.semantic_score * 100).toFixed(1)}%</span>
+                      <span>Keyword: {(result.score_breakdown.keyword_score * 100).toFixed(1)}%</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Display document results (for detailed search) */}
+          {results.document_results && (
+            <div className="space-y-4">
+              {results.document_results.map((doc, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-1 bg-indigo-600 text-white rounded text-xs font-bold">
+                        #{idx + 1}
+                      </span>
+                      <FileText className="w-4 h-4 text-indigo-600" />
+                      <span className="font-medium text-gray-900">{doc.document_name}</span>
+                    </div>
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
+                      {(doc.total_similarity * 100).toFixed(1)}%
                     </span>
                   </div>
-                </div>
-                <p className="text-gray-700 text-sm leading-relaxed">{result.content.substring(0, 300)}...</p>
-                
-                {result.score_breakdown && (
-                  <div className="mt-2 flex space-x-4 text-xs text-gray-500">
-                    <span>Semantic: {(result.score_breakdown.semantic_score * 100).toFixed(1)}%</span>
-                    <span>Keyword: {(result.score_breakdown.keyword_score * 100).toFixed(1)}%</span>
+                  
+                  <div className="grid grid-cols-3 gap-4 text-sm mt-2 mb-3">
+                    <div>
+                      <span className="text-gray-600">Chunks:</span>
+                      <span className="ml-2 font-medium">{doc.chunk_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Max Score:</span>
+                      <span className="ml-2 font-medium">{(doc.max_chunk_similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Avg Score:</span>
+                      <span className="ml-2 font-medium">{(doc.avg_chunk_similarity * 100).toFixed(1)}%</span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  
+                  <p className="text-gray-700 text-sm leading-relaxed bg-gray-50 p-3 rounded">
+                    {doc.top_chunk_content}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Display document similarities (for /search/detailed) */}
+          {results.document_similarities && (
+            <div className="space-y-4">
+              {results.document_similarities.map((doc, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-2">
+                      <span className="px-2 py-1 bg-indigo-600 text-white rounded text-xs font-bold">
+                        #{idx + 1}
+                      </span>
+                      <FileText className="w-4 h-4 text-indigo-600" />
+                      <span className="font-medium text-gray-900">{doc.document_name}</span>
+                    </div>
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
+                      {(doc.total_similarity * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-4 text-sm mb-3 bg-gray-50 p-3 rounded">
+                    <div>
+                      <span className="text-gray-600">Chunks:</span>
+                      <span className="ml-2 font-medium text-gray-900">{doc.chunk_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Max:</span>
+                      <span className="ml-2 font-medium text-gray-900">{(doc.max_chunk_similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Avg:</span>
+                      <span className="ml-2 font-medium text-gray-900">{(doc.avg_chunk_similarity * 100).toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-2">
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Top Chunk Preview:</p>
+                    <p className="text-sm text-gray-700 leading-relaxed bg-white p-3 rounded border border-gray-200">
+                      {doc.top_chunk_content}
+                    </p>
+                  </div>
+
+                  {doc.top_chunks && doc.top_chunks.length > 0 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-xs font-semibold text-gray-700 mb-2">
+                        Top {doc.top_chunks.length} Chunks:
+                      </p>
+                      <div className="space-y-2">
+                        {doc.top_chunks.map((chunk, i) => (
+                          <div key={i} className="text-xs bg-gray-50 p-2 rounded border border-gray-200">
+                            <div className="flex justify-between mb-1">
+                              <span className="text-gray-600">Page {chunk.page_number || 'N/A'}</span>
+                              <span className="font-medium text-indigo-600">
+                                {(chunk.similarity_score * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            {chunk.content && (
+                              <p className="text-gray-600 italic">"{chunk.content}"</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
+
 
 // =============================================
 // UPLOAD TAB COMPONENT

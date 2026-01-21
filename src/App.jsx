@@ -43,7 +43,7 @@ const App = () => {
                 <Search className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Thai Search & Chat</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Thai Document Search & Chat</h1>
                 <p className="text-sm text-gray-600">Multi-format document search with AI</p>
               </div>
             </div>

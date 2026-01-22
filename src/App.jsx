@@ -820,8 +820,6 @@ const SearchTab = () => {
         endpoint = '/search/upload-file';
       } else if (fileSearchType === 'detailed') {
         endpoint = '/search/upload-file/detailed';
-      } else {
-        endpoint = '/search/upload-file/hybrid';
       }
 
       console.log('File Search Request:', { endpoint, file: file.name, fileSearchType, k });
@@ -832,12 +830,46 @@ const SearchTab = () => {
 
       const data = await res.json();
       console.log('File Search Response:', data);
-      
+
       if (!res.ok) {
         throw new Error(data.error || 'File search failed');
       }
-      
-      setResults({ ...data, searchMode: 'file', type: fileSearchType, fileName: file.name });
+
+      // Normalize various possible response shapes so the UI can render consistently.
+      const normalized = {
+        searchMode: 'file',
+        type: fileSearchType,
+        fileName: file.name,
+        // fallback: include raw response so user can inspect if nothing matches
+        raw: data
+      };
+
+      // Common keys that might contain chunk-level results
+      if (Array.isArray(data.results) && data.results.length > 0) {
+        normalized.results = data.results;
+      } else if (Array.isArray(data.search_results) && data.search_results.length > 0) {
+        normalized.results = data.search_results;
+      } else if (Array.isArray(data.items) && data.items.length > 0) {
+        normalized.results = data.items;
+      }
+
+      // Document-level aggregations (detailed responses)
+      if (Array.isArray(data.document_results) && data.document_results.length > 0) {
+        normalized.document_results = data.document_results;
+      } else if (Array.isArray(data.documents) && data.documents.length > 0) {
+        normalized.document_results = data.documents;
+      }
+
+      // Another possible key name
+      if (Array.isArray(data.document_similarities) && data.document_similarities.length > 0) {
+        normalized.document_similarities = data.document_similarities;
+      }
+
+      // Totals and timing
+      normalized.total_results = data.total_results || data.total_documents_found || (normalized.results ? normalized.results.length : (normalized.document_results ? normalized.document_results.length : 0));
+      normalized.processing_time = data.processing_time || data.search_time || data.processing_time_ms;
+
+      setResults(normalized);
     } catch (error) {
       console.error('File search failed:', error);
       alert('File search failed: ' + error.message);
@@ -1004,7 +1036,7 @@ const SearchTab = () => {
           {/* File Search Type Selection */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Search Type</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => setFileSearchType('semantic')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -1024,16 +1056,6 @@ const SearchTab = () => {
                 }`}
               >
                 Detailed
-              </button>
-              <button
-                onClick={() => setFileSearchType('hybrid')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                  fileSearchType === 'hybrid'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Hybrid
               </button>
             </div>
           </div>
@@ -1103,7 +1125,6 @@ const SearchTab = () => {
             <p className="text-sm text-blue-800">
               {fileSearchType === 'semantic' && '📄 Semantic: Basic file-based semantic search'}
               {fileSearchType === 'detailed' && '📊 Detailed: Document-level results with chunk ranking'}
-              {fileSearchType === 'hybrid' && '🔀 Hybrid: Combined semantic + keyword search'}
             </p>
           </div>
         </div>

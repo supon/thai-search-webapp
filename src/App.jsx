@@ -38,15 +38,13 @@ const App = () => {
       <header className="bg-white shadow-md border-b-4 border-indigo-500">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="bg-indigo-600 p-2 rounded-lg">
-                <Search className="w-8 h-8 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Thai Document Search & Chat</h1>
-                <p className="text-sm text-gray-600">Multi-format document search with AI</p>
-              </div>
-            </div>
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className="flex flex-col items-center space-y-2 hover:opacity-80 transition-opacity cursor-pointer"
+            >
+              <img src="webapp/public/thaijo-document-search.png" alt="ThaiJO Document Search" className="h-12 w-auto" />
+              <p className="text-sm text-gray-600">Multi-format document search with AI</p>
+            </button>
             
             {/* Status Indicator */}
             <div className="flex items-center space-x-4">
@@ -619,7 +617,7 @@ const ChatTab = ({ apiStatus }) => {
                         <p className="text-xs font-semibold text-gray-700">
                           Sources ({msg.sources.length})
                         </p>
-                        {msg.sources.length > 3 && (
+                        {msg.sources.length > 1 && (
                           <button
                             onClick={() => toggleSourcesExpanded(idx)}
                             className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
@@ -631,7 +629,7 @@ const ChatTab = ({ apiStatus }) => {
                       
                       {/* Display sources */}
                       <div className="space-y-2">
-                        {(expandedSources[idx] ? msg.sources : msg.sources.slice(0, 3)).map((src, i) => (
+                        {(expandedSources[idx] ? msg.sources : msg.sources.slice(0, 1)).map((src, i) => (
                           <div key={i} className="text-xs bg-white bg-opacity-50 rounded p-2 border border-gray-200">
                             <div className="flex items-start justify-between mb-1">
                               <div className="flex items-center space-x-2 flex-1">
@@ -661,9 +659,9 @@ const ChatTab = ({ apiStatus }) => {
                         ))}
                       </div>
                       
-                      {!expandedSources[idx] && msg.sources.length > 3 && (
+                      {!expandedSources[idx] && msg.sources.length > 1 && (
                         <div className="text-xs text-gray-500 mt-2 text-center">
-                          +{msg.sources.length - 3} more sources
+                          +{msg.sources.length - 1} more sources
                         </div>
                       )}
                     </div>
@@ -784,6 +782,7 @@ const SearchTab = () => {
         };
       }
 
+      console.log('Text Search Request:', { endpoint, requestBody });
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -791,8 +790,10 @@ const SearchTab = () => {
       });
 
       const data = await res.json();
+      console.log('Text Search Response:', data);
       setResults({ ...data, searchMode: 'text', type: textSearchType });
     } catch (error) {
+      console.error('Search failed:', error);
       alert('Search failed: ' + error.message);
     } finally {
       setLoading(false);
@@ -823,14 +824,22 @@ const SearchTab = () => {
         endpoint = '/search/upload-file/hybrid';
       }
 
+      console.log('File Search Request:', { endpoint, file: file.name, fileSearchType, k });
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         body: formData
       });
 
       const data = await res.json();
+      console.log('File Search Response:', data);
+      
+      if (!res.ok) {
+        throw new Error(data.error || 'File search failed');
+      }
+      
       setResults({ ...data, searchMode: 'file', type: fileSearchType, fileName: file.name });
     } catch (error) {
+      console.error('File search failed:', error);
       alert('File search failed: ' + error.message);
     } finally {
       setLoading(false);
@@ -1131,7 +1140,7 @@ const SearchTab = () => {
           </div>
 
           {/* Display results based on type */}
-          {results.results && (
+          {results.results && results.results.length > 0 && (
             <div className="space-y-4">
               {results.results.map((result, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -1168,7 +1177,7 @@ const SearchTab = () => {
           )}
 
           {/* Display document results (for detailed search) */}
-          {results.document_results && (
+          {results.document_results && results.document_results.length > 0 && (
             <div className="space-y-4">
               {results.document_results.map((doc, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -1209,7 +1218,7 @@ const SearchTab = () => {
           )}
 
           {/* Display document similarities (for /search/detailed) */}
-          {results.document_similarities && (
+          {results.document_similarities && results.document_similarities.length > 0 && (
             <div className="space-y-4">
               {results.document_similarities.map((doc, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -1272,6 +1281,14 @@ const SearchTab = () => {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Fallback message when no results match expected structure */}
+          {!results.results && !results.document_results && !results.document_similarities && (
+            <div className="text-center py-8">
+              <p className="text-gray-600 text-lg">No results found</p>
+              <p className="text-gray-500 text-sm mt-2">Try adjusting your search parameters or check the console for errors</p>
             </div>
           )}
         </div>

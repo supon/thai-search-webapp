@@ -740,7 +740,7 @@ const SearchTab = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [searchType, setSearchType] = useState('hybrid');
+  const [searchType, setSearchType] = useState('semantic'); // 'Semantic' or 'Hybrid'
   const [k, setK] = useState(10);
   
   // Text search options
@@ -748,7 +748,7 @@ const SearchTab = () => {
   
   // File upload options
   const [file, setFile] = useState(null);
-  const [fileSearchType, setFileSearchType] = useState('semantic'); // 'semantic', 'detailed', 'hybrid'
+  const [fileSearchType, setFileSearchType] = useState('emantic'); // 'semantic', 'detailed', 'hybrid'
   const [useFullContent, setUseFullContent] = useState(false);
 
   const performTextSearch = async () => {

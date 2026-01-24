@@ -42,7 +42,7 @@ const App = () => {
               onClick={() => setActiveTab('chat')}
               className="flex flex-col items-center space-y-2 hover:opacity-80 transition-opacity cursor-pointer"
             >
-              <img src="webapp/public/thaijo-document-search.png" alt="ThaiJO Document Search" className="h-12 w-auto" />
+              <img src="webapp/public/document-seach-chat.png" alt="ThaiJO Document Search" className="h-12 w-auto" />
               <p className="text-sm text-gray-600">Multi-format document search with AI</p>
             </button>
             

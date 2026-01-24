@@ -94,10 +94,18 @@ const App = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === 'chat' && <ChatTab apiStatus={apiStatus} />}
-        {activeTab === 'search' && <SearchTab />}
-        {activeTab === 'upload' && <UploadTab />}
-        {activeTab === 'status' && <StatusTab />}
+        <div className={activeTab === 'chat' ? 'block' : 'hidden'}>
+          <ChatTab apiStatus={apiStatus} />
+        </div>
+        <div className={activeTab === 'search' ? 'block' : 'hidden'}>
+          <SearchTab />
+        </div>
+        <div className={activeTab === 'upload' ? 'block' : 'hidden'}>
+          <UploadTab />
+        </div>
+        <div className={activeTab === 'status' ? 'block' : 'hidden'}>
+          <StatusTab />
+        </div>
       </div>
     </div>
   );
@@ -435,7 +443,7 @@ const ChatTab = ({ apiStatus }) => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                RAG Search
+                Knowledge
               </button>
               <button
                 onClick={() => setMode('direct')}
@@ -844,8 +852,12 @@ const SearchTab = () => {
         raw: data
       };
 
+      // Check for chunk_results.results (new API structure)
+      if (data.chunk_results && Array.isArray(data.chunk_results.results) && data.chunk_results.results.length > 0) {
+        normalized.results = data.chunk_results.results;
+      } 
       // Common keys that might contain chunk-level results
-      if (Array.isArray(data.results) && data.results.length > 0) {
+      else if (Array.isArray(data.results) && data.results.length > 0) {
         normalized.results = data.results;
       } else if (Array.isArray(data.search_results) && data.search_results.length > 0) {
         normalized.results = data.search_results;
@@ -853,8 +865,12 @@ const SearchTab = () => {
         normalized.results = data.items;
       }
 
-      // Document-level aggregations (detailed responses)
-      if (Array.isArray(data.document_results) && data.document_results.length > 0) {
+      // Document-level aggregations - check nested results first (new API structure)
+      if (data.document_results && Array.isArray(data.document_results.results) && data.document_results.results.length > 0) {
+        normalized.document_results = data.document_results.results;
+      }
+      // Fallback for other possible structures
+      else if (Array.isArray(data.document_results) && data.document_results.length > 0) {
         normalized.document_results = data.document_results;
       } else if (Array.isArray(data.documents) && data.documents.length > 0) {
         normalized.document_results = data.documents;
@@ -868,6 +884,12 @@ const SearchTab = () => {
       // Totals and timing
       normalized.total_results = data.total_results || data.total_documents_found || (normalized.results ? normalized.results.length : (normalized.document_results ? normalized.document_results.length : 0));
       normalized.processing_time = data.processing_time || data.search_time || data.processing_time_ms;
+
+      // Debug: Show raw response if no results found
+      if (!normalized.results && !normalized.document_results && !normalized.document_similarities) {
+        console.warn('No recognized result keys in response. Raw response:', data);
+        normalized.debugInfo = JSON.stringify(data, null, 2);
+      }
 
       setResults(normalized);
     } catch (error) {
@@ -1310,6 +1332,19 @@ const SearchTab = () => {
             <div className="text-center py-8">
               <p className="text-gray-600 text-lg">No results found</p>
               <p className="text-gray-500 text-sm mt-2">Try adjusting your search parameters or check the console for errors</p>
+              
+              {results.debugInfo && (
+                <div className="mt-4 text-left">
+                  <details className="inline-block">
+                    <summary className="cursor-pointer text-blue-600 text-sm font-medium hover:underline">
+                      Show API Response
+                    </summary>
+                    <pre className="mt-2 p-4 bg-gray-100 rounded text-xs overflow-x-auto text-gray-800 max-h-64">
+                      {results.debugInfo}
+                    </pre>
+                  </details>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -1224,13 +1224,32 @@ const SearchTab = () => {
             <div className="space-y-4">
               {results.document_results.map((doc, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-2">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3">
                       <span className="px-2 py-1 bg-indigo-600 text-white rounded text-xs font-bold">
                         #{idx + 1}
                       </span>
                       <FileText className="w-4 h-4 text-indigo-600" />
-                      <span className="font-medium text-gray-900">{doc.document_name}</span>
+                      <div>
+                        <p className="font-medium text-gray-900">{doc.document_name}</p>
+                        <div className="flex items-center space-x-3 mt-1 text-xs text-gray-600">
+                          {doc.metadata?.krrn && (
+                            <span className="px-2 py-1 bg-gray-100 rounded">
+                              <span className="font-semibold">KRRN:</span> {doc.metadata.krrn}
+                            </span>
+                          )}
+                          {doc.metadata?.type && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-semibold">
+                              {doc.metadata.type}
+                            </span>
+                          )}
+                          {doc.metadata?.file_type && !doc.metadata?.type && (
+                            <span className="px-2 py-1 bg-gray-100 rounded">
+                              Type: {doc.metadata.file_type.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
                       {(doc.total_similarity * 100).toFixed(1)}%

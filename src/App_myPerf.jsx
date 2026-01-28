@@ -639,7 +639,7 @@ const ChatTab = ({ apiStatus }) => {
                       <div className="space-y-2">
                         {(expandedSources[idx] ? msg.sources : msg.sources.slice(0, 1)).map((src, i) => (
                           <div key={i} className="text-xs bg-white bg-opacity-50 rounded p-2 border border-gray-200">
-                            <div className="flex items-start justify-between mb-2">
+                            <div className="flex items-start justify-between mb-1">
                               <div className="flex items-center space-x-2 flex-1">
                                 <div className="flex items-center space-x-1 flex-shrink-0">
                                   <span className="px-1.5 py-0.5 bg-indigo-600 text-white rounded text-xs font-bold">
@@ -655,25 +655,11 @@ const ChatTab = ({ apiStatus }) => {
                                 {(src.score * 100).toFixed(1)}%
                               </span>
                             </div>
-                            
-                            {/* Metadata Fields - Enhanced Display */}
-                            <div className="bg-gray-100 rounded p-1.5 mb-2 space-y-0.5">
-                              {src.title && (
-                                <div className="text-gray-700"><span className="font-semibold">Title:</span> {src.title}</div>
-                              )}
-                              {src.krrn && (
-                                <div className="text-gray-700"><span className="font-semibold">KRRN:</span> {src.krrn}</div>
-                              )}
-                              {src.type && (
-                                <div className="text-gray-700"><span className="font-semibold">Type:</span> {src.type}</div>
-                              )}
-                            </div>
-                            
-                            <div className="text-gray-600 ml-1">
+                            <div className="text-gray-600 ml-5 pl-6">
                               Page {src.page}
                             </div>
                             {src.content && (
-                              <div className="text-gray-500 text-xs mt-1 ml-1 italic">
+                              <div className="text-gray-500 text-xs mt-1 ml-5 pl-6 italic">
                                 "{src.content}"
                               </div>
                             )}
@@ -770,7 +756,7 @@ const SearchTab = () => {
   
   // File upload options
   const [file, setFile] = useState(null);
-  const [fileSearchType, setFileSearchType] = useState('semantic'); // 'semantic' or 'detailed'
+  const [fileSearchType, setFileSearchType] = useState('emantic'); // 'semantic', 'detailed', 'hybrid'
   const [useFullContent, setUseFullContent] = useState(false);
 
   const performTextSearch = async () => {
@@ -1207,7 +1193,7 @@ const SearchTab = () => {
                         #{idx + 1}
                       </span>
                       <FileText className="w-4 h-4 text-indigo-600" />
-                      <span className="font-medium text-gray-900">{result.metadata?.source_file || result.metadata?.filename || 'Unknown'}</span>
+                      <span className="font-medium text-gray-900">{result.metadata?.source_file || 'Unknown'}</span>
                     </div>
                     <div className="flex items-center space-x-4 text-sm">
                       {result.metadata?.page_number && (
@@ -1218,23 +1204,6 @@ const SearchTab = () => {
                       </span>
                     </div>
                   </div>
-                  
-                  {/* Metadata Fields */}
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-3 bg-gray-50 p-2 rounded">
-                    {(result.metadata?.title || result.title) && (
-                      <div><span className="font-medium text-gray-700">Title:</span> {result.metadata?.title || result.title}</div>
-                    )}
-                    {(result.metadata?.krrn || result.krrn) && (
-                      <div><span className="font-medium text-gray-700">KRRN:</span> {result.metadata?.krrn || result.krrn}</div>
-                    )}
-                    {(result.metadata?.type || result.type) && (
-                      <div><span className="font-medium text-gray-700">Type:</span> {result.metadata?.type || result.type}</div>
-                    )}
-                    {(result.metadata?.filename || result.filename) && (
-                      <div><span className="font-medium text-gray-700">File:</span> {result.metadata?.filename || result.filename}</div>
-                    )}
-                  </div>
-                  
                   <p className="text-gray-700 text-sm leading-relaxed">
                     {result.content?.substring(0, 300)}...
                   </p>
@@ -1285,22 +1254,6 @@ const SearchTab = () => {
                     <span className="px-3 py-1 bg-indigo-100 text-indigo-800 rounded-md font-medium">
                       {(doc.total_similarity * 100).toFixed(1)}%
                     </span>
-                  </div>
-                  
-                  {/* Metadata Fields */}
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-3 bg-gray-50 p-2 rounded">
-                    {doc.title && (
-                      <div><span className="font-medium text-gray-700">Title:</span> {doc.title}</div>
-                    )}
-                    {doc.krrn && (
-                      <div><span className="font-medium text-gray-700">KRRN:</span> {doc.krrn}</div>
-                    )}
-                    {doc.type && (
-                      <div><span className="font-medium text-gray-700">Type:</span> {doc.type}</div>
-                    )}
-                    {doc.filename && (
-                      <div><span className="font-medium text-gray-700">File:</span> {doc.filename}</div>
-                    )}
                   </div>
                   
                   <div className="grid grid-cols-3 gap-4 text-sm mt-2 mb-3">
